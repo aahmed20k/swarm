@@ -1,0 +1,934 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Swarm Maze Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;600;700&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one-screen lab. Graph-paper sheet fills the space; instrument panel below on phones, right rail on desktop. Dark theme = blueprint. */
+:root{
+  --paper:#eef2ef; --grid:#d6e0e2; --ink:#1d2742; --ink-dim:#5b6782; --panel:#e2e8e5;
+  --line:#c3ced2; --accent:#2f5bd3; --accent-ink:#ffffff; --wall:#1d2742; --goal:#13895b; --hazard:#cf3b2a; --lead:#c98a07;
+  --display:"Familjen Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"DM Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0f2240; --grid:#1b3359; --ink:#e6eefb; --ink-dim:#9fb2d4; --panel:#0a1830;
+    --line:#24406d; --accent:#8fb4ff; --accent-ink:#0a1830; --wall:#e8f0ff; --goal:#4fe0a0; --hazard:#ff7a66; --lead:#ffc94d; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0f2240; --grid:#1b3359; --ink:#e6eefb; --ink-dim:#9fb2d4; --panel:#0a1830;
+  --line:#24406d; --accent:#8fb4ff; --accent-ink:#0a1830; --wall:#e8f0ff; --goal:#4fe0a0; --hazard:#ff7a66; --lead:#ffc94d; color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--panel);color:var(--ink);font-family:var(--display);overflow:hidden}
+.app{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:10px}
+.bar{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;padding-bottom:8px}
+.bar h1{margin:0;font-size:1.15rem;font-weight:700;letter-spacing:-.01em}
+.bar p{margin:0;color:var(--ink-dim);font-size:.82rem}
+.main{min-height:0;display:grid;grid-template-rows:minmax(0,1fr) auto;gap:10px}
+@media (min-width:900px){ .main{grid-template-rows:none;grid-template-columns:minmax(0,1fr) 330px} }
+.sheet{position:relative;min-height:0;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--paper)}
+#cv{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.hud{position:absolute;left:8px;top:8px;right:8px;pointer-events:none;font-family:var(--mono);font-size:.74rem;font-variant-numeric:tabular-nums;color:var(--ink)}
+.hud span{background:var(--paper);border:1px solid var(--line);padding:3px 7px;border-radius:4px;display:inline-block}
+.panel > *{flex-shrink:0}
+.panel{min-height:0;max-height:42vh;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:2px 4px 10px 2px}
+@media (min-width:900px){ .panel{max-height:none} }
+.label{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-dim);font-weight:600}
+.tools{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.tools button,.seg button{padding:8px 4px;border:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:transparent;color:var(--ink);font:600 .8rem var(--display);cursor:pointer;min-width:0}
+.tools button:nth-child(3n){border-right:0}
+.tools button:nth-child(n+4){border-bottom:0}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{flex:1;border-bottom:0}
+.seg button:last-child{border-right:0}
+.tools button[aria-pressed="true"],.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.btn{padding:8px 8px;border:1px solid var(--ink);border-radius:6px;background:transparent;color:var(--ink);font:600 .8rem var(--display);cursor:pointer}
+.btn.primary{background:var(--ink);color:var(--paper)}
+.btn.warn{border-color:var(--hazard);color:var(--hazard)}
+details{border-top:1px solid var(--line);padding-top:8px}
+summary{cursor:pointer;font-weight:700;font-size:.92rem;list-style:none;display:flex;align-items:center;gap:8px}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"+";font-family:var(--mono);color:var(--ink-dim);width:12px}
+details[open] summary::before{content:"–"}
+.body{display:flex;flex-direction:column;gap:10px;padding:10px 0 4px}
+.note{margin:0;font-size:.78rem;color:var(--ink-dim);line-height:1.45}
+.slider{display:grid;grid-template-columns:1fr auto;gap:0 8px;align-items:center}
+.slider label{font-size:.85rem}
+.slider small{grid-column:1 / -1;font-size:.72rem;color:var(--ink-dim)}
+.slider output{font-family:var(--mono);font-size:.76rem;font-variant-numeric:tabular-nums;color:var(--ink-dim)}
+.slider input{grid-column:1 / -1;width:100%;accent-color:var(--accent);margin:2px 0 0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips label{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:5px 10px;font-size:.8rem;cursor:pointer}
+.chips input{accent-color:var(--accent);margin:0}
+select{font:500 .85rem var(--display);padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink)}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dotcard{border:1px solid var(--ink);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:10px;background:var(--paper)}
+.dotcard header{display:flex;align-items:center;gap:8px}
+.dotcard header b{font-family:var(--mono);font-weight:500}
+.dotcard header button{margin-left:auto;border:0;background:transparent;color:var(--ink-dim);font:600 1rem var(--display);cursor:pointer}
+.swatch{width:12px;height:12px;border-radius:50%;display:inline-block;flex:none}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:.78rem}
+.stats div{display:flex;justify-content:space-between;gap:6px;border-bottom:1px dotted var(--line);padding-bottom:2px}
+.stats span{color:var(--ink-dim)}
+.stats b{font-family:var(--mono);font-weight:500;font-variant-numeric:tabular-nums}
+.key{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:.75rem;color:var(--ink-dim)}
+.key span{display:inline-flex;align-items:center;gap:5px}
+.ramp{height:8px;border-radius:4px}
+.ends{display:flex;justify-content:space-between;font-size:.72rem;color:var(--ink-dim);font-family:var(--mono)}
+#chart{width:100%;height:110px;display:block;border:1px solid var(--line);border-radius:6px;background:var(--paper)}
+</style>
+
+<div class="app">
+  <header class="bar">
+    <h1>Swarm Maze Lab</h1>
+    <p id="tip">Drag to draw walls. Dots learn the maze themselves and share what they know with dots nearby.</p>
+  </header>
+  <div class="main">
+    <div class="sheet" id="sheet">
+      <canvas id="cv" aria-label="Particle simulation canvas"></canvas>
+      <div class="hud"><span id="hudText">Starting…</span></div>
+    </div>
+    <aside class="panel" id="panel">
+      <div class="label">Touch tool</div>
+      <div class="tools" id="tools">
+        <button data-tool="draw" aria-pressed="true">Draw wall</button>
+        <button data-tool="erase" aria-pressed="false">Erase</button>
+        <button data-tool="inspect" aria-pressed="false">Pick a dot</button>
+        <button data-tool="goal" aria-pressed="false">Goal ±</button>
+        <button data-tool="hazard" aria-pressed="false">Hazard ±</button>
+        <button data-tool="start" aria-pressed="false">Start point</button>
+      </div>
+      <div class="btns">
+        <button class="btn primary" id="mazeBtn">New maze</button>
+        <button class="btn" id="pauseBtn">Pause</button>
+        <button class="btn" id="restartBtn">Send all to start</button>
+        <button class="btn warn" id="wipeBtn">Wipe all brains</button>
+        <button class="btn" id="clearGoalsBtn">Clear goals</button>
+        <button class="btn" id="clearHazBtn">Clear hazards</button>
+        <button class="btn" id="clearWallsBtn">Clear walls</button>
+        <button class="btn" id="randHazBtn">Add 3 hazards</button>
+      </div>
+
+      <section class="dotcard" id="dotcard" hidden>
+        <header><span class="swatch" id="dcSwatch"></span><b id="dcName">Dot #1</b><button id="dcClose" aria-label="Deselect dot">×</button></header>
+        <div class="stats" id="dcStats"></div>
+        <div class="key"><span><i class="swatch" style="background:var(--accent)"></i>Path it knows</span><span><i class="swatch" style="background:var(--ink-dim)"></i>Places it's been</span><span><i class="swatch" style="background:var(--hazard)"></i>Places it fears</span></div>
+        <div class="chips"><label><input type="checkbox" id="dcLock"> Lock traits (ignore population sliders)</label></div>
+        <div id="dcSliders" class="body" style="padding:0"></div>
+        <div class="btns">
+          <button class="btn" id="dcForget">Forget everything</button>
+          <button class="btn" id="dcCopy">Copy traits to all</button>
+          <button class="btn" id="dcClone">Clone with brain</button>
+          <button class="btn warn" id="dcRemove">Remove dot</button>
+        </div>
+      </section>
+
+      <details open>
+        <summary>Population</summary>
+        <div class="body">
+          <div class="slider"><label for="count">Number of dots</label><output id="countOut">120</output><input type="range" id="count" min="1" max="400" value="120"></div>
+          <div class="slider"><label for="variation">Variation between dots</label><output id="variationOut">35%</output><input type="range" id="variation" min="0" max="100" value="35"><small>0% makes every dot identical</small></div>
+          <p class="note">These set the average for every unlocked dot. To tune a single dot, use Pick a dot and tap it.</p>
+          <div id="popSliders" class="body" style="padding:0"></div>
+          <button class="btn" id="rerollBtn">Re-roll everyone's traits</button>
+        </div>
+      </details>
+
+      <details open>
+        <summary>Talking</summary>
+        <div class="body">
+          <div class="chips">
+            <label><input type="checkbox" id="talkOn" checked> Dots talk</label>
+            <label><input type="checkbox" id="talkWalls"> Signals pass through walls</label>
+            <label><input type="checkbox" id="showTalk" checked> Show messages</label>
+          </div>
+          <p class="note">A dot can only talk to dots inside its talk radius. It passes on four things: a route it knows to a goal, the closest it's been to a goal and where, places that hurt, and goals that turned out to be gone. Whatever a dot hears, it can pass on to the next dot.</p>
+          <div class="key">
+            <span><i class="swatch" style="background:var(--goal)"></i>Route</span>
+            <span><i class="swatch" style="background:var(--lead)"></i>"I got close here"</span>
+            <span><i class="swatch" style="background:var(--hazard)"></i>Danger</span>
+            <span><i class="swatch" style="background:var(--ink-dim)"></i>"That goal is gone"</span>
+          </div>
+        </div>
+      </details>
+
+      <details>
+        <summary>World</summary>
+        <div class="body">
+          <div class="label">Maze size</div>
+          <div class="seg" id="mazeSize">
+            <button data-u="8" aria-pressed="true">Small</button>
+            <button data-u="6" aria-pressed="false">Medium</button>
+            <button data-u="4" aria-pressed="false">Large</button>
+          </div>
+          <div class="label">After reaching a goal</div>
+          <div class="seg" id="arrive">
+            <button data-v="again" aria-pressed="true">Go again from start</button>
+            <button data-v="stay" aria-pressed="false">Stay there</button>
+          </div>
+          <div class="slider"><label for="simSpeed">Simulation speed</label><output id="simSpeedOut">1.0×</output><input type="range" id="simSpeed" min="25" max="300" value="100"></div>
+          <div class="chips"><label><input type="checkbox" id="scentOn" checked> Goals give off a scent</label></div>
+          <div class="slider"><label for="scentRange">Scent reach</label><output id="scentRangeOut">420px</output><input type="range" id="scentRange" min="60" max="900" value="420"><small>Scent spreads in a straight line through walls, so it can mislead</small></div>
+          <div class="slider"><label for="hazSize">New hazard size</label><output id="hazSizeOut">12px</output><input type="range" id="hazSize" min="6" max="40" value="12"></div>
+          <div class="slider"><label for="brush">Wall brush size</label><output id="brushOut">1</output><input type="range" id="brush" min="1" max="5" value="1"></div>
+        </div>
+      </details>
+
+      <details>
+        <summary>View</summary>
+        <div class="body">
+          <div class="chips">
+            <label><input type="checkbox" id="optTrails" checked> Trails</label>
+            <label><input type="checkbox" id="optSensors"> Sensors</label>
+            <label><input type="checkbox" id="optScent"> Scent map</label>
+            <label><input type="checkbox" id="optBrain" checked> Picked dot's memory</label>
+          </div>
+          <label class="slider" for="colorMode" style="display:flex;justify-content:space-between;align-items:center">Color dots by
+            <select id="colorMode">
+              <option value="smarts">Smarts</option>
+              <option value="know">What it knows</option>
+              <option value="trips">Trips completed</option>
+            </select>
+          </label>
+          <div id="legend"></div>
+        </div>
+      </details>
+
+      <details open>
+        <summary>Learning curve</summary>
+        <div class="body">
+          <canvas id="chart" aria-label="Trip time per arrival"></canvas>
+          <p class="note">Each point is one trip from the start to a goal. If the line drops, the swarm is getting faster from what it has learned.</p>
+        </div>
+      </details>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+const CELL = 8, TAU = Math.PI * 2, U = 65535, TRAIL_MAX = 6000, GOAL_R = CELL * 1.7, HB = 32;
+const pct = v => Math.round(v * 100) + '%';
+const TRAITS = [
+  {k:'smarts',   name:'Smarts',         min:0,    max:1,   def:.55, step:.01, fmt:pct, hint:'Follows what it knows instead of wandering at random'},
+  {k:'curiosity',name:'Curiosity',      min:0,    max:1,   def:.6,  step:.01, fmt:pct, hint:"Drawn to places it hasn't been yet"},
+  {k:'memory',   name:'Memory',         min:0,    max:1,   def:.75, step:.01, fmt:pct, hint:'How much of what it learns sticks'},
+  {k:'nose',     name:'Sense of smell', min:0,    max:1,   def:.5,  step:.01, fmt:pct, hint:'Uses the goal scent to tell warmer from colder'},
+  {k:'fear',     name:'Caution',        min:0,    max:1,   def:.6,  step:.01, fmt:pct, hint:'How hard it steers away from hazards'},
+  {k:'talk',     name:'Talk radius',    min:0,    max:160, def:55,  step:1,   fmt:v=>Math.round(v)+'px', hint:'How far its messages reach. 0 means it never talks'},
+  {k:'trust',    name:'Trust',          min:0,    max:1,   def:.65, step:.01, fmt:pct, hint:'Chance it believes what another dot tells it'},
+  {k:'speed',    name:'Speed',          min:.3,   max:3,   def:1.4,step:.05, fmt:v=>v.toFixed(2), hint:'Top speed'},
+  {k:'agility',  name:'Agility',        min:.02,  max:.4,  def:.13, step:.01, fmt:v=>Math.round(v*100), hint:'How quickly it can turn'},
+  {k:'sight',    name:'Sight range',    min:10,   max:140, def:45,  step:1,   fmt:v=>Math.round(v)+'px', hint:'How far it sees walls, goals and hazards'},
+  {k:'space',    name:'Personal space', min:3,    max:30,  def:10,  step:1,   fmt:v=>Math.round(v)+'px', hint:'Distance it keeps from other dots'},
+];
+const T = {}; TRAITS.forEach(t => T[t.k] = t);
+
+const S = { tool:'draw', simSpeed:1, brush:1, paused:false, talkOn:true, talkWalls:false, showTalk:true,
+  scentOn:true, scentRange:420, onArrive:'again', hazardSize:12, colorMode:'smarts', variation:.35,
+  trails:true, sensors:false, scentMap:false, brainMap:true, mazeU:8, pop:{} };
+TRAITS.forEach(t => S.pop[t.k] = t.def);
+
+const sheet = document.getElementById('sheet');
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const mk = () => document.createElement('canvas');
+const wallsCv = mk(), wctx = wallsCv.getContext('2d');
+const trailCv = mk(), tctx = trailCv.getContext('2d');
+const scentCv = mk(), sctx = scentCv.getContext('2d');
+const brainCv = mk(), bctx = brainCv.getContext('2d');
+const chartCv = document.getElementById('chart'), chx = chartCv.getContext('2d');
+const hudText = document.getElementById('hudText');
+
+let W = 0, H = 0, DPR = 1, cols = 0, rows = 0, grid = null, hasMaze = false, wallsDirty = false;
+let goals = [], hazards = [], start = {x:40, y:40};
+let particles = [], selected = null, nextId = 1, nextObj = 1;
+let simT = 0, frame = 0, arrivals = [], msgCount = 0, hitCount = 0, tripCount = 0, events = [];
+const colors = {}; let isDark = false;
+
+const rnd = (a,b) => a + Math.random() * (b - a);
+const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+const gauss = () => { let u = 0; for (let i = 0; i < 4; i++) u += Math.random(); return (u - 2) / 0.577; };
+const angDiff = (a,b) => { let d = a - b; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; };
+function hexRgb(h){ h = h.replace('#',''); if (h.length === 3) h = h.split('').map(x => x + x).join(''); const n = parseInt(h,16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+const fmtT = t => { const m = Math.floor(t/60), s = (t%60).toFixed(1); return m + ':' + (s < 10 ? '0' : '') + s; };
+const cellOfXY = (x,y) => Math.floor(y/CELL) * cols + Math.floor(x/CELL);
+const cellDist = (a,b) => Math.max(Math.abs(a%cols - b%cols), Math.abs(((a/cols)|0) - ((b/cols)|0)));
+
+function readColors(){
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ['paper','grid','ink','ink-dim','wall','goal','accent','line','hazard','lead']) colors[k] = cs.getPropertyValue('--' + k).trim() || '#000';
+  const [r,g,b] = hexRgb(colors.paper); isDark = (r*.3 + g*.59 + b*.11) < 110;
+  for (const p of particles) p.col = colorFor(p);
+  if (grid) { renderWalls(); renderScent(); tctx.clearRect(0,0,W,H); }
+  renderLegend();
+}
+
+/* ---------------- world ---------------- */
+const isWall = (c,r) => c < 0 || r < 0 || c >= cols || r >= rows || grid[r*cols + c] === 1;
+const wallAt = (x,y) => isWall(Math.floor(x/CELL), Math.floor(y/CELL));
+function los(x1,y1,x2,y2){
+  const d = Math.hypot(x2-x1, y2-y1), n = Math.ceil(d / (CELL*.5));
+  for (let i = 1; i < n; i++) if (wallAt(x1 + (x2-x1)*i/n, y1 + (y2-y1)*i/n)) return false;
+  return true;
+}
+function scentAt(x,y){
+  if (!S.scentOn) return 0; let best = 0;
+  for (const g of goals) { const s = 1 - Math.hypot(g.x-x, g.y-y) / S.scentRange; if (s > best) best = s; }
+  return best;
+}
+function nearestGoalDist(x,y){ let d = 1e9; for (const g of goals) d = Math.min(d, Math.hypot(g.x-x, g.y-y)); return d; }
+function openNear(c,r,maxR){
+  for (let rad = 0; rad <= maxR; rad++) for (let dy = -rad; dy <= rad; dy++) for (let dx = -rad; dx <= rad; dx++) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) !== rad) continue;
+    if (!isWall(c+dx, r+dy)) return [c+dx, r+dy];
+  }
+  return null;
+}
+const centerOf = (c,r) => ({x:(c+.5)*CELL, y:(r+.5)*CELL});
+
+function resize(force){
+  const rc = sheet.getBoundingClientRect(), w = Math.floor(rc.width), h = Math.floor(rc.height);
+  if (w < 40 || h < 40) return;
+  if (!force && Math.abs(w-W) < 2 && Math.abs(h-H) < 2) return;
+  const oc = cols, orr = rows, old = grid;
+  W = w; H = h; DPR = Math.min(2, window.devicePixelRatio || 1);
+  for (const c of [cv, wallsCv, trailCv]) { c.width = Math.round(W*DPR); c.height = Math.round(H*DPR); }
+  for (const c of [ctx, wctx, tctx]) c.setTransform(DPR,0,0,DPR,0,0);
+  cols = Math.floor(W/CELL); rows = Math.floor(H/CELL);
+  grid = new Uint8Array(cols*rows);
+  scentCv.width = brainCv.width = cols; scentCv.height = brainCv.height = rows;
+  if (!old) { newMaze(); return; }
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++)
+    grid[r*cols+c] = (r < orr && c < oc) ? old[r*oc+c] : (hasMaze ? 1 : 0);
+  const sameCols = oc === cols;
+  for (const p of particles) {
+    if (sameCols) resizeBrain(p); else { allocBrain(p); wipeBrain(p); }
+  }
+  const clampPt = o => { o.x = clamp(o.x, CELL*1.5, cols*CELL - CELL*1.5); o.y = clamp(o.y, CELL*1.5, rows*CELL - CELL*1.5); };
+  clampPt(start); goals.forEach(g => { clampPt(g); g.cell = cellOfXY(g.x,g.y); }); hazards.forEach(clampPt);
+  afterWallsChanged(); relocateTrapped();
+}
+
+function newMaze(){
+  grid.fill(1);
+  const Ux = S.mazeU, mc = Math.max(2, Math.floor((cols-1)/Ux)), mr = Math.max(2, Math.floor((rows-1)/Ux));
+  const ox = Math.floor((cols - (mc*Ux+1))/2), oy = Math.floor((rows - (mr*Ux+1))/2);
+  const room = (i,j) => { for (let dy = 1; dy < Ux; dy++) for (let dx = 1; dx < Ux; dx++) grid[(oy+j*Ux+dy)*cols + ox+i*Ux+dx] = 0; };
+  const pass = (i,j,ni,nj) => { room(i,j); room(ni,nj);
+    if (ni !== i) { const x = ox + Math.max(i,ni)*Ux; for (let dy = 1; dy < Ux; dy++) grid[(oy+j*Ux+dy)*cols + x] = 0; }
+    else { const y = oy + Math.max(j,nj)*Ux; for (let dx = 1; dx < Ux; dx++) grid[y*cols + ox+i*Ux+dx] = 0; } };
+  const seen = new Uint8Array(mc*mr), stack = [[0,0]]; seen[0] = 1; room(0,0);
+  const D = [[1,0],[-1,0],[0,1],[0,-1]];
+  while (stack.length) {
+    const [i,j] = stack[stack.length-1], nb = [];
+    for (const [dx,dy] of D) { const ni = i+dx, nj = j+dy; if (ni >= 0 && nj >= 0 && ni < mc && nj < mr && !seen[nj*mc+ni]) nb.push([ni,nj]); }
+    if (!nb.length) { stack.pop(); continue; }
+    const [ni,nj] = nb[Math.floor(Math.random()*nb.length)];
+    pass(i,j,ni,nj); seen[nj*mc+ni] = 1; stack.push([ni,nj]);
+  }
+  const loops = Math.max(1, Math.floor(mc*mr*0.08));
+  for (let k = 0; k < loops; k++) { const i = Math.floor(Math.random()*mc), j = Math.floor(Math.random()*mr);
+    if (Math.random() < .5) { if (i+1 < mc) pass(i,j,i+1,j); } else { if (j+1 < mr) pass(i,j,i,j+1); } }
+  const roomC = (i,j) => centerOf(ox + i*Ux + Math.floor(Ux/2), oy + j*Ux + Math.floor(Ux/2));
+  start = roomC(0,0);
+  goals = [];
+  addGoal(roomC(mc-1, mr-1));
+  addGoal(roomC(mc-1, 0));
+  hazards = [];
+  let tries = 0;
+  while (hazards.length < Math.min(4, Math.floor(mc*mr/12)) && tries++ < 200) {
+    const i = Math.floor(Math.random()*mc), j = Math.floor(Math.random()*mr);
+    if (i + j < 3 || (mc-1-i) + (mr-1-j) < 2 || (mc-1-i) + j < 2) continue;
+    const pt = roomC(i,j); if (hazards.some(h => Math.hypot(h.x-pt.x, h.y-pt.y) < Ux*CELL*2)) continue;
+    hazards.push({id:nextObj++, x:pt.x, y:pt.y, r:S.hazardSize});
+  }
+  hasMaze = true;
+  afterWallsChanged();
+  arrivals = []; tripCount = 0; hitCount = 0; msgCount = 0;
+  for (const p of particles) { if (p.brainSize !== cols*rows) allocBrain(p); wipeBrain(p); spawn(p); }
+  tctx.clearRect(0,0,W,H);
+}
+function addGoal(pt){ goals.push({id:nextObj++, x:pt.x, y:pt.y, cell:cellOfXY(pt.x,pt.y)}); renderScent(); }
+
+function afterWallsChanged(){ renderWalls(); renderScent(); }
+function renderWalls(){
+  wctx.clearRect(0,0,W,H);
+  wctx.strokeStyle = colors.grid; wctx.lineWidth = 1; wctx.beginPath();
+  for (let x = 0; x <= W; x += CELL*4) { wctx.moveTo(x+.5,0); wctx.lineTo(x+.5,H); }
+  for (let y = 0; y <= H; y += CELL*4) { wctx.moveTo(0,y+.5); wctx.lineTo(W,y+.5); }
+  wctx.stroke();
+  wctx.fillStyle = colors.wall;
+  for (let r = 0; r < rows; r++) { let c = 0;
+    while (c < cols) { if (grid[r*cols+c]) { const s = c; while (c < cols && grid[r*cols+c]) c++; wctx.fillRect(s*CELL, r*CELL, (c-s)*CELL, CELL); } else c++; } }
+  wctx.fillRect(cols*CELL, 0, W - cols*CELL, H); wctx.fillRect(0, rows*CELL, W, H - rows*CELL);
+}
+function renderScent(){
+  if (!cols) return;
+  const img = sctx.createImageData(cols, rows), [r,g,b] = hexRgb(colors.goal || '#13895b');
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+    const s = scentAt((x+.5)*CELL, (y+.5)*CELL); if (s <= 0) continue;
+    const i = (y*cols+x)*4; img.data[i] = r; img.data[i+1] = g; img.data[i+2] = b; img.data[i+3] = Math.round(s*s*110);
+  }
+  sctx.putImageData(img, 0, 0);
+}
+
+/* ---------------- dots ---------------- */
+function rollTrait(k){ const t = T[k]; const v = S.pop[k] + gauss() * S.variation * (t.max - t.min) * 0.22; return clamp(v, t.min, t.max); }
+function allocBrain(p){
+  const n = cols*rows; p.brainSize = n;
+  p.hv = new Uint16Array(n); p.visits = new Uint8Array(n); p.danger = new Uint8Array(n);
+  p.trail = p.trail || new Int32Array(TRAIL_MAX);
+}
+function resizeBrain(p){
+  const n = cols*rows; if (p.brainSize === n) return;
+  const grow = (A, fill) => { const B = new A.constructor(n); if (fill) B.fill(fill); B.set(A.subarray(0, Math.min(n, A.length))); return B; };
+  p.hv = grow(p.hv, U); p.visits = grow(p.visits, 0); p.danger = grow(p.danger, 0); p.brainSize = n;
+  if (p.route && p.route.cells.some(c => c >= n)) p.route = null;
+  p.tl = 0;
+}
+function wipeBrain(p){
+  p.hv.fill(U); p.visits.fill(0); p.danger.fill(0); p.tl = 0;
+  p.route = null; p.target = null; p.bestS = 0; p.lead = null; p.heardS = 0; p.heardLead = null;
+  p.dangerSpots = []; p.deadNews = [];
+}
+function makeParticle(){
+  const p = { id:nextId++, x:0, y:0, vx:0, vy:0, a:rnd(0,TAU), desired:0, t:{}, locked:false,
+    trips:0, bestTrip:null, lastTrip:null, hits:0, heard:0, told:0, spawnT:simT, cell:-1, think:0,
+    rays:[1,1,1], seeGoal:null, seeD:0, done:false, doneGoal:null, orbit:0, orbitR:rnd(5,12), col:'' };
+  TRAITS.forEach(t => p.t[t.k] = rollTrait(t.k));
+  allocBrain(p); wipeBrain(p); spawn(p); p.desired = p.a; p.col = colorFor(p);
+  return p;
+}
+function spawn(p){
+  let spot = null;
+  if (goals.length) spot = openNear(Math.floor(start.x/CELL) + Math.round(rnd(-1,1)), Math.floor(start.y/CELL) + Math.round(rnd(-1,1)), 10);
+  else for (let k = 0; k < 300 && !spot; k++) { const c = Math.floor(rnd(1,cols-1)), r = Math.floor(rnd(1,rows-1)); if (!isWall(c,r)) spot = [c,r]; }
+  if (!spot) spot = openNear(Math.floor(cols/2), Math.floor(rows/2), Math.max(cols,rows)) || [1,1];
+  p.x = (spot[0] + rnd(.25,.75)) * CELL; p.y = (spot[1] + rnd(.25,.75)) * CELL;
+  p.vx = p.vy = 0; p.tl = 0; p.spawnT = simT; p.cell = -1; p.think = 0; p.done = false; p.doneGoal = null; p.seeGoal = null;
+}
+function setCount(n){
+  while (particles.length < n) particles.push(makeParticle());
+  while (particles.length > n) { const p = particles.pop(); if (p === selected) selectDot(null); }
+}
+function relocateTrapped(){
+  for (const p of particles) { if (p.done || !wallAt(p.x,p.y)) continue;
+    const s = openNear(Math.floor(p.x/CELL), Math.floor(p.y/CELL), 12);
+    if (s) { p.x = (s[0]+.5)*CELL; p.y = (s[1]+.5)*CELL; p.vx = p.vy = 0; } else spawn(p); }
+}
+
+/* ---------------- learning ---------------- */
+function addDeadNews(p, n){
+  if (p.deadNews.some(e => cellDist(e.c, n.c) <= 3 && e.t >= n.t)) return false;
+  p.deadNews = p.deadNews.filter(e => cellDist(e.c, n.c) > 3);
+  p.deadNews.push({c:n.c, t:n.t}); if (p.deadNews.length > 6) p.deadNews.shift();
+  return true;
+}
+function dropRoute(p){ if (!p.route) return; for (const c of p.route.cells) p.hv[c] = U; p.route = null; }
+function forgetHere(p, c, r){
+  const R = Math.ceil(p.t.sight / CELL) + 2;
+  for (let y = Math.max(0, r-R); y <= Math.min(rows-1, r+R); y++)
+    for (let x = Math.max(0, c-R); x <= Math.min(cols-1, c+R); x++) p.hv[y*cols+x] = U;
+  if (p.route && cellDist(p.route.end, r*cols+c) <= R) { addDeadNews(p, {c:p.route.end, t:simT}); dropRoute(p); }
+  if (p.target && Math.hypot(p.target.x - p.x, p.target.y - p.y) < R*CELL) p.target = null;
+}
+function stampDanger(p, spot, strength){
+  const c0 = spot.c % cols, r0 = (spot.c / cols) | 0, R = spot.rr + 1;
+  for (let y = Math.max(0, r0-R); y <= Math.min(rows-1, r0+R); y++)
+    for (let x = Math.max(0, c0-R); x <= Math.min(cols-1, c0+R); x++) {
+      const d = Math.hypot(x-c0, y-r0); if (d > R) continue;
+      const v = Math.round(255 * strength * (1 - d/(R+1))); const i = y*cols+x;
+      if (v > p.danger[i]) p.danger[i] = v;
+    }
+  if (!p.dangerSpots.some(e => e.c === spot.c)) { p.dangerSpots.push({c:spot.c, rr:spot.rr}); if (p.dangerSpots.length > 16) p.dangerSpots.shift(); }
+}
+function hazardNear(x, y, R){ for (const h of hazards) if (Math.hypot(h.x-x, h.y-y) - h.r < R) return true; return false; }
+
+function learn(p, c, r, i){
+  if (p.visits[i] < 255) p.visits[i]++;
+  if (p.tl >= TRAIL_MAX) { p.trail.copyWithin(0, TRAIL_MAX/2); p.tl = TRAIL_MAX/2; }
+  p.trail[p.tl++] = i;
+  const px = p.x, py = p.y, sight = p.t.sight, hv = p.hv;
+  // how close am I? (scent)
+  const s = scentAt(px, py);
+  if (s > p.bestS) { p.bestS = s; p.lead = {x:px, y:py}; }
+  else if (p.lead && Math.hypot(p.lead.x-px, p.lead.y-py) < CELL*2) { p.bestS = s; p.lead = {x:px, y:py}; }
+  // can I see a goal?
+  p.seeGoal = null; let gd = 1e9;
+  for (const g of goals) { const d = Math.hypot(g.x-px, g.y-py); if (d < sight && d < gd && los(px,py,g.x,g.y)) { gd = d; p.seeGoal = g; } }
+  p.seeD = gd;
+  // does what I remember contradict what I see?
+  if (hv[i] !== U) { const claimed = (hv[i]/2 + 2) * CELL; if (claimed <= sight + CELL && nearestGoalDist(px,py) > claimed) forgetHere(p, c, r); }
+  // update my estimate of how far a goal is from here (learning in real time)
+  if (Math.random() < 0.25 + 0.75 * p.t.memory) {
+    let m = p.seeGoal ? Math.round(gd / CELL * 2) : U;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue; const nc = c+dx, nr = r+dy;
+      if (isWall(nc,nr)) continue; if (dx && dy && (isWall(c+dx,r) || isWall(c,r+dy))) continue;
+      const v = hv[nr*cols+nc]; if (v !== U) { const k = v + (dx && dy ? 3 : 2); if (k < m) m = k; }
+    }
+    if (m < U) hv[i] = Math.min(m, U-1);
+  }
+  if (p.danger[i] && !hazardNear(px, py, sight)) p.danger[i] >>= 1;
+  if (p.target && Math.hypot(p.target.x-px, p.target.y-py) < CELL*2.5) {
+    if (p.target.kind === 'lead' && s < p.heardS) p.heardS = s;
+    p.target = null;
+  }
+}
+
+function loopFree(trail, n){
+  const out = [], pos = new Map();
+  for (let k = 0; k < n; k++) { const c = trail[k];
+    if (pos.has(c)) { const j = pos.get(c); for (let m = j+1; m < out.length; m++) pos.delete(out[m]); out.length = j+1; }
+    else { pos.set(c, out.length); out.push(c); } }
+  return out;
+}
+function arrive(p, g){
+  p.trips++; tripCount++;
+  const trip = simT - p.spawnT; p.lastTrip = trip; if (p.bestTrip == null || trip < p.bestTrip) p.bestTrip = trip;
+  arrivals.push({trip, id:p.id}); if (arrivals.length > 600) arrivals.shift();
+  p.deadNews = p.deadNews.filter(n => cellDist(n.c, g.cell) > 3);
+  const path = loopFree(p.trail, p.tl); if (path[path.length-1] !== g.cell) path.push(g.cell);
+  const cost = new Uint16Array(path.length);
+  for (let j = path.length-2; j >= 0; j--) {
+    const a = path[j], b = path[j+1], diag = (a%cols !== b%cols) && (((a/cols)|0) !== ((b/cols)|0));
+    cost[j] = Math.min(U-1, cost[j+1] + (diag ? 3 : 2));
+  }
+  const keep = 0.4 + 0.6 * p.t.memory;
+  for (let j = 0; j < path.length; j++) if (Math.random() < keep && cost[j] < p.hv[path[j]]) p.hv[path[j]] = cost[j];
+  const route = {cells:Int32Array.from(path), cost, len:cost[0], end:g.cell, t:simT, by:p.id};
+  if (!p.route || route.len < p.route.len || p.route.end === g.cell) p.route = route;
+  if (S.onArrive === 'again') spawn(p);
+  else { p.done = true; p.doneGoal = g; p.orbit = Math.atan2(p.y-g.y, p.x-g.x); }
+}
+function hurt(p, hz){
+  p.hits++; hitCount++;
+  stampDanger(p, {c:cellOfXY(hz.x,hz.y), rr:Math.ceil(hz.r/CELL)+1}, 0.5 + 0.5*p.t.memory);
+  spawn(p);
+}
+
+/* ---------------- talking ---------------- */
+function adoptRoute(r, route){
+  r.route = route;
+  const keep = 0.4 + 0.6 * r.t.memory;
+  for (let j = 0; j < route.cells.length; j++) { const c = route.cells[j]; if (c < r.brainSize && Math.random() < keep && route.cost[j] < r.hv[c]) r.hv[c] = route.cost[j]; }
+  let bd = 1e9, bp = null;
+  for (let j = 0; j < route.cells.length; j += 2) { const c = route.cells[j], x = (c%cols+.5)*CELL, y = (((c/cols)|0)+.5)*CELL, d = Math.hypot(x-r.x, y-r.y); if (d < bd) { bd = d; bp = {x,y}; } }
+  if (bp && r.hv[r.cell] === U) r.target = {x:bp.x, y:bp.y, kind:'route', age:0};
+}
+const routeIsDead = (p, route) => p.deadNews.some(n => cellDist(n.c, route.end) <= 3 && n.t > route.t);
+function transmit(s, r){
+  if (Math.random() > r.t.trust) return;
+  let kind = null;
+  for (const n of s.deadNews) if (addDeadNews(r, n)) { kind = 'dead'; if (r.route && cellDist(r.route.end, n.c) <= 3 && r.route.t < n.t) dropRoute(r); }
+  if (s.route && s.route !== r.route && (!r.route || s.route.len < r.route.len) && !routeIsDead(r, s.route)) { adoptRoute(r, s.route); kind = 'route'; }
+  else if (!r.route) {
+    const useHeard = s.heardS > s.bestS, pt = useHeard ? s.heardLead : s.lead, v = useHeard ? s.heardS : s.bestS;
+    if (pt && v > Math.max(r.bestS, r.heardS) + 0.03) { r.heardS = v; r.heardLead = pt; r.target = {x:pt.x, y:pt.y, kind:'lead', age:0}; kind = kind || 'lead'; }
+  }
+  for (const d of s.dangerSpots) if (!r.dangerSpots.some(e => e.c === d.c)) { stampDanger(r, d, 0.6 * (0.5 + 0.5*r.t.memory)); kind = kind || 'danger'; }
+  if (kind) { r.heard++; s.told++; msgCount++;
+    if (S.showTalk && events.length < 500) events.push({x1:s.x, y1:s.y, x2:r.x, y2:r.y, life:30, kind}); }
+}
+function talk(p){
+  if (!S.talkOn || p.done) return; const R = p.t.talk; if (R < 2) return;
+  let n = 0;
+  for (const q of particles) {
+    if (q === p || q.done) continue; const dx = q.x - p.x, dy = q.y - p.y;
+    if (Math.abs(dx) > R || Math.abs(dy) > R || dx*dx + dy*dy > R*R) continue;
+    if (!S.talkWalls && !los(p.x, p.y, q.x, q.y)) continue;
+    transmit(p, q); if (++n >= 8) break;
+  }
+}
+
+/* ---------------- thinking + moving ---------------- */
+function decide(p, c, r){
+  const hv = p.hv, hc = hv[r*cols+c], sm = p.t.smarts, useScent = S.scentOn && goals.length > 0;
+  const s0 = useScent ? scentAt(p.x, p.y) : 0;
+  const seenHz = hazards.filter(h => Math.hypot(h.x-p.x, h.y-p.y) - h.r < p.t.sight);
+  let best = -1e9, bestA = p.a + Math.PI;
+  for (let k = 0; k < 8; k++) {
+    const a = k * Math.PI / 4, dx = Math.round(Math.cos(a)), dy = Math.round(Math.sin(a)), diag = dx && dy;
+    if (isWall(c+dx, r+dy)) continue;
+    if (diag && (isWall(c+dx, r) || isWall(c, r+dy))) continue;
+    const n1 = (r+dy)*cols + c+dx, far = !isWall(c+2*dx, r+2*dy), t2 = far ? (r+2*dy)*cols + c+2*dx : n1;
+    const nx = (c + dx*2 + .5)*CELL, ny = (r + dy*2 + .5)*CELL;
+    let sc = 0;
+    const hn = hv[n1];
+    if (hn !== U) sc += sm * 3 * (hc !== U ? clamp((hc - hn) / (diag ? 3 : 2), -1.5, 1.2) : 1);
+    else if (hc !== U) sc -= sm * 0.8;
+    if (useScent) sc += p.t.nose * 1.5 * clamp((scentAt(nx,ny) - s0) / (2*CELL / S.scentRange), -1, 1);
+    sc += p.t.curiosity * 1.6 / (1 + p.visits[t2] * 0.7);
+    sc -= p.t.fear * (p.danger[n1] / 255 * 3 + p.danger[t2] / 255 * 1.5);
+    for (const h of seenHz) { const d = Math.hypot(nx-h.x, ny-h.y) - h.r; if (d < CELL*3) sc -= p.t.fear * 3 * (1 - d/(CELL*3)); }
+    if (p.target && hc === U) sc += p.t.trust * 1.3 * Math.cos(angDiff(Math.atan2(p.target.y-p.y, p.target.x-p.x), a));
+    if (!far) sc -= 0.5;
+    sc += 0.45 * Math.cos(angDiff(a, p.a)) + (1.1 - sm) * 0.9 * Math.random() + Math.random() * 0.05;
+    if (sc > best) { best = sc; bestA = a; }
+  }
+  return bestA;
+}
+function ray(x, y, a, L){
+  const dx = Math.cos(a), dy = Math.sin(a), st = CELL*.5;
+  for (let s = st; s <= L; s += st) if (wallAt(x + dx*s, y + dy*s)) return s / L;
+  return 1;
+}
+let hcols = 1, hrows = 1, buckets = [];
+function buildHash(){
+  hcols = Math.ceil(W/HB) + 1; hrows = Math.ceil(H/HB) + 1; const n = hcols*hrows;
+  if (buckets.length !== n) { buckets = new Array(n); for (let i = 0; i < n; i++) buckets[i] = []; } else for (const b of buckets) b.length = 0;
+  for (const p of particles) { if (p.done) continue; buckets[clamp(Math.floor(p.y/HB),0,hrows-1)*hcols + clamp(Math.floor(p.x/HB),0,hcols-1)].push(p); }
+}
+function moveP(p, dt){
+  const R = 2.4, sp = Math.hypot(p.vx, p.vy) * dt, n = Math.max(1, Math.ceil(sp / 2.5)), sdt = dt / n;
+  for (let k = 0; k < n; k++) {
+    let nx = p.x + p.vx*sdt;
+    if (wallAt(nx + Math.sign(p.vx)*R, p.y)) { p.vx *= -0.4; nx = p.x; p.a = Math.PI - p.a; p.think = 0; }
+    p.x = nx;
+    let ny = p.y + p.vy*sdt;
+    if (wallAt(p.x, ny + Math.sign(p.vy)*R)) { p.vy *= -0.4; ny = p.y; p.a = -p.a; p.think = 0; }
+    p.y = ny;
+  }
+}
+function step(dt){
+  frame++; simT += dt / 60;
+  buildHash();
+  const Wc = cols*CELL, Hc = rows*CELL;
+  for (let pi = 0; pi < particles.length; pi++) {
+    const p = particles[pi];
+    if (p.done) {
+      if (!goals.includes(p.doneGoal)) { spawn(p); continue; }
+      p.orbit += 0.03*dt; p.x = p.doneGoal.x + Math.cos(p.orbit)*p.orbitR; p.y = p.doneGoal.y + Math.sin(p.orbit)*p.orbitR; continue;
+    }
+    const c = Math.floor(p.x/CELL), r = Math.floor(p.y/CELL), i = r*cols + c;
+    if (i !== p.cell && i >= 0 && i < cols*rows) { p.cell = i; learn(p, c, r, i); p.think = 0; }
+    if (p.target && (p.target.age += dt) > 1200) p.target = null;
+    const forgetEvery = Math.round(600 + 3000 * p.t.memory);
+    if ((frame + p.id*7) % forgetEvery === 0) { const v = p.visits; for (let k = 0; k < v.length; k++) v[k] >>= 1; }
+    if (--p.think <= 0) { p.desired = decide(p, c, r); p.think = 8 + (p.id % 6); }
+    if (p.seeGoal) p.desired = Math.atan2(p.seeGoal.y - p.y, p.seeGoal.x - p.x);
+    const ag = p.t.agility * dt;
+    p.a += clamp(angDiff(p.desired, p.a), -ag, ag);
+    const L = Math.min(70, p.t.sight), f0 = ray(p.x,p.y,p.a,L), fl = ray(p.x,p.y,p.a-.6,L*.8), fr = ray(p.x,p.y,p.a+.6,L*.8);
+    p.rays[0] = f0; p.rays[1] = fl; p.rays[2] = fr;
+    if (f0 < 1 && !(p.seeGoal && p.seeD < L)) p.a += (fr > fl ? 1 : -1) * (1 - f0) * p.t.agility * 2 * dt;
+
+    const sp = p.t.speed * S.simSpeed;
+    let ax = Math.cos(p.a)*sp, ay = Math.sin(p.a)*sp;
+    const bx = Math.floor(p.x/HB), by = Math.floor(p.y/HB), sp2 = p.t.space;
+    for (let yy = by-1; yy <= by+1; yy++) { if (yy < 0 || yy >= hrows) continue;
+      for (let xx = bx-1; xx <= bx+1; xx++) { if (xx < 0 || xx >= hcols) continue;
+        for (const q of buckets[yy*hcols+xx]) { if (q === p) continue;
+          const dx = p.x - q.x, dy = p.y - q.y, d = Math.hypot(dx, dy);
+          if (d > .01 && d < sp2) { const k = (sp2 - d) / sp2; ax += dx/d*k*1.1; ay += dy/d*k*1.1; } } } }
+    for (const h of hazards) {
+      const dx = p.x - h.x, dy = p.y - h.y, dist = Math.hypot(dx, dy) || .01, d = dist - h.r, R = p.t.sight * .6 + 8;
+      if (d < R) { const k = (1 - d/R) * (0.3 + p.t.fear * 2.6) * sp; ax += dx/dist*k; ay += dy/dist*k; }
+    }
+    if (!hasMaze) {
+      const m = 48, ex = p.x < m ? (m-p.x)/m : p.x > Wc-m ? -(p.x-(Wc-m))/m : 0, ey = p.y < m ? (m-p.y)/m : p.y > Hc-m ? -(p.y-(Hc-m))/m : 0;
+      if (ex && ey) { ax += ex*1.6; ay += ey*1.6; }
+    }
+    const k = Math.min(1, .18*dt); p.vx += (ax - p.vx)*k; p.vy += (ay - p.vy)*k;
+    moveP(p, dt);
+    let gone = false;
+    for (const h of hazards) if (Math.hypot(p.x-h.x, p.y-h.y) < h.r) { hurt(p, h); gone = true; break; }
+    if (gone) continue;
+    for (const g of goals) if (Math.hypot(p.x-g.x, p.y-g.y) < GOAL_R) { arrive(p, g); gone = true; break; }
+    if (gone) continue;
+    if ((frame + p.id) % 6 === 0) talk(p);
+  }
+}
+
+/* ---------------- drawing ---------------- */
+function colorFor(p){
+  const sat = isDark ? 85 : 70, lit = isDark ? 66 : 46;
+  if (S.colorMode === 'know') return p.route ? colors.accent : (p.target && p.target.kind === 'lead') || p.heardS > 0 ? colors.lead : colors['ink-dim'];
+  if (S.colorMode === 'trips') return p.trips ? `hsl(${205 + Math.min(p.trips, 8)/8*110} ${sat}% ${lit}%)` : colors['ink-dim'];
+  return `hsl(${(205 + p.t.smarts*110).toFixed(0)} ${sat}% ${lit}%)`;
+}
+function renderBrain(p){
+  const img = bctx.createImageData(cols, rows), d = img.data, n = cols*rows;
+  const acc = hexRgb(colors.accent), dim = hexRgb(colors['ink-dim']), hz = hexRgb(colors.hazard);
+  let maxH = 1; for (let i = 0; i < n; i++) if (p.hv[i] !== U && p.hv[i] > maxH) maxH = p.hv[i];
+  for (let i = 0; i < n; i++) {
+    const o = i*4;
+    if (p.danger[i] > 20) { d[o]=hz[0]; d[o+1]=hz[1]; d[o+2]=hz[2]; d[o+3] = Math.min(200, p.danger[i]); }
+    else if (p.hv[i] !== U) { const k = 1 - p.hv[i]/maxH; d[o]=acc[0]; d[o+1]=acc[1]; d[o+2]=acc[2]; d[o+3] = Math.round(70 + k*150); }
+    else if (p.visits[i]) { d[o]=dim[0]; d[o+1]=dim[1]; d[o+2]=dim[2]; d[o+3] = Math.min(90, 25 + p.visits[i]*8); }
+  }
+  bctx.putImageData(img, 0, 0);
+}
+function render(){
+  ctx.fillStyle = colors.paper; ctx.fillRect(0,0,W,H);
+  ctx.imageSmoothingEnabled = false;
+  if (S.scentMap && S.scentOn) { ctx.imageSmoothingEnabled = true; ctx.drawImage(scentCv, 0, 0, cols*CELL, rows*CELL); ctx.imageSmoothingEnabled = false; }
+  if (S.brainMap && selected) { if (frame % 6 === 0 || S.paused) renderBrain(selected); ctx.drawImage(brainCv, 0, 0, cols*CELL, rows*CELL); }
+  ctx.drawImage(wallsCv, 0, 0, W, H);
+  if (S.trails) {
+    if (!S.paused) {
+      tctx.globalCompositeOperation = 'destination-out'; tctx.fillStyle = 'rgba(0,0,0,0.05)'; tctx.fillRect(0,0,W,H);
+      tctx.globalCompositeOperation = 'source-over'; tctx.globalAlpha = .4;
+      for (const p of particles) { if (p.done) continue; tctx.fillStyle = p.col; tctx.fillRect(p.x-1, p.y-1, 2, 2); }
+      tctx.globalAlpha = 1;
+    }
+    ctx.drawImage(trailCv, 0, 0, W, H);
+  }
+  // hazards
+  for (const h of hazards) {
+    ctx.fillStyle = colors.hazard; ctx.globalAlpha = .16; ctx.beginPath(); ctx.arc(h.x, h.y, h.r + 4, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 1; ctx.strokeStyle = colors.hazard; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, TAU); ctx.stroke();
+    const q = h.r * .45; ctx.beginPath(); ctx.moveTo(h.x-q, h.y-q); ctx.lineTo(h.x+q, h.y+q); ctx.moveTo(h.x+q, h.y-q); ctx.lineTo(h.x-q, h.y+q); ctx.stroke();
+  }
+  // start + goals
+  if (goals.length) {
+    ctx.strokeStyle = colors['ink-dim']; ctx.lineWidth = 1.5; ctx.setLineDash([3,3]);
+    ctx.beginPath(); ctx.arc(start.x, start.y, 10, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+  }
+  const pulse = (Math.sin(frame*.06) + 1) / 2;
+  for (const g of goals) {
+    ctx.fillStyle = colors.goal; ctx.beginPath(); ctx.arc(g.x, g.y, 6, 0, TAU); ctx.fill();
+    ctx.strokeStyle = colors.goal; ctx.lineWidth = 1.5; ctx.globalAlpha = 1 - pulse*.8;
+    ctx.beginPath(); ctx.arc(g.x, g.y, 9 + pulse*8, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  // messages
+  if (S.showTalk && events.length) {
+    const kc = {route:colors.goal, lead:colors.lead, danger:colors.hazard, dead:colors['ink-dim']};
+    ctx.lineWidth = 1.2;
+    for (const e of events) { ctx.strokeStyle = kc[e.kind]; ctx.globalAlpha = e.life / 30 * .8; ctx.beginPath(); ctx.moveTo(e.x1, e.y1); ctx.lineTo(e.x2, e.y2); ctx.stroke(); }
+    ctx.globalAlpha = 1;
+  }
+  const drawRays = p => { const L = Math.min(70, p.t.sight), as = [0,-.6,.6], ls = [L, L*.8, L*.8];
+    for (let i = 0; i < 3; i++) { const a = p.a + as[i], l = ls[i]*p.rays[i]; ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + Math.cos(a)*l, p.y + Math.sin(a)*l); } };
+  if (S.sensors) { ctx.strokeStyle = colors['ink-dim']; ctx.globalAlpha = .35; ctx.lineWidth = 1; ctx.beginPath();
+    for (const p of particles) if (!p.done) drawRays(p); ctx.stroke(); ctx.globalAlpha = 1; }
+  // selected extras
+  if (selected) {
+    const p = selected;
+    if (p.route) { ctx.strokeStyle = colors.goal; ctx.lineWidth = 2; ctx.globalAlpha = .7; ctx.beginPath();
+      p.route.cells.forEach((c, j) => { const x = (c%cols+.5)*CELL, y = (((c/cols)|0)+.5)*CELL; j ? ctx.lineTo(x,y) : ctx.moveTo(x,y); });
+      ctx.stroke(); ctx.globalAlpha = 1; }
+    if (p.target) { ctx.strokeStyle = colors.lead; ctx.setLineDash([4,4]); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(p.target.x,p.target.y); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(p.target.x, p.target.y, 5, 0, TAU); ctx.stroke(); }
+    if (p.t.talk > 1 && S.talkOn) { ctx.strokeStyle = colors.accent; ctx.globalAlpha = .4; ctx.lineWidth = 1; ctx.setLineDash([2,4]);
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.t.talk, 0, TAU); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; }
+    ctx.strokeStyle = colors.accent; ctx.lineWidth = 1.5; ctx.beginPath(); drawRays(p); ctx.stroke();
+    ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, TAU); ctx.stroke();
+  }
+  for (const p of particles) { ctx.globalAlpha = p.done ? .55 : 1; ctx.fillStyle = p.col; ctx.beginPath(); ctx.arc(p.x, p.y, 2.8, 0, TAU); ctx.fill(); }
+  ctx.globalAlpha = 1;
+}
+
+function niceMax(v){ for (const m of [5,10,15,20,30,45,60,90,120,180,240,300,450,600,900,1200,1800,3600]) if (v <= m) return m; return Math.ceil(v/600)*600; }
+function drawChart(){
+  const w = chartCv.clientWidth, h = chartCv.clientHeight; if (!w || !h) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  if (chartCv.width !== Math.round(w*dpr)) { chartCv.width = Math.round(w*dpr); chartCv.height = Math.round(h*dpr); }
+  chx.setTransform(dpr,0,0,dpr,0,0); chx.clearRect(0,0,w,h);
+  chx.font = '11px ' + getComputedStyle(document.body).getPropertyValue('--mono'); chx.textBaseline = 'middle';
+  if (!arrivals.length) { chx.fillStyle = colors['ink-dim']; chx.fillText('No trips yet. Times appear as dots reach goals.', 10, h/2); return; }
+  const padL = 36, padR = 8, padT = 10, padB = 18, n = arrivals.length;
+  const sorted = arrivals.map(a => a.trip).sort((a,b) => a-b);
+  const maxT = niceMax(sorted[Math.floor(sorted.length*.95)] || sorted[sorted.length-1]);
+  const X = i => padL + (n === 1 ? 0 : i/(n-1)) * (w - padL - padR), Y = t => padT + (1 - Math.min(t, maxT)/maxT) * (h - padT - padB);
+  chx.strokeStyle = colors.line; chx.lineWidth = 1; chx.fillStyle = colors['ink-dim'];
+  for (const t of [0, maxT/2, maxT]) { const y = Math.round(Y(t)) + .5; chx.beginPath(); chx.moveTo(padL, y); chx.lineTo(w-padR, y); chx.stroke(); chx.fillText(t + 's', 4, y); }
+  chx.textAlign = 'right'; chx.fillText(n + ' trips', w - padR, h - 8); chx.textAlign = 'left'; chx.fillText('trip time', padL, h - 8);
+  chx.fillStyle = colors['ink-dim']; chx.globalAlpha = .45;
+  arrivals.forEach((a, i) => { chx.beginPath(); chx.arc(X(i), Y(a.trip), 1.6, 0, TAU); chx.fill(); });
+  chx.globalAlpha = 1;
+  const win = Math.max(3, Math.min(25, Math.floor(n/8)));
+  chx.strokeStyle = colors.accent; chx.lineWidth = 2; chx.beginPath();
+  for (let i = 0; i < n; i++) { const sl = arrivals.slice(Math.max(0, i-win+1), i+1).map(a => a.trip).sort((a,b) => a-b); const m = sl[Math.floor(sl.length/2)];
+    i ? chx.lineTo(X(i), Y(m)) : chx.moveTo(X(i), Y(m)); }
+  chx.stroke();
+}
+
+function updateHud(){
+  const know = particles.filter(p => p.route).length;
+  let s = `${fmtT(simT)} · ${tripCount} trips · ${know}/${particles.length} know a route · ${msgCount} messages · ${hitCount} hazard hits`;
+  if (!goals.length) s = `${fmtT(simT)} · no goals, free roaming · ${msgCount} messages`;
+  if (S.paused) s += ' · paused';
+  hudText.textContent = s;
+}
+
+/* ---------------- panel: sliders ---------------- */
+function sliderHTML(prefix, t, value, withHint){
+  return `<div class="slider"><label for="${prefix}-${t.k}">${t.name}</label><output id="${prefix}-${t.k}-out">${t.fmt(value)}</output>` +
+    `<input type="range" id="${prefix}-${t.k}" min="${t.min}" max="${t.max}" step="${t.step}" value="${value}">` +
+    (withHint ? `<small>${t.hint}</small>` : '') + `</div>`;
+}
+document.getElementById('popSliders').innerHTML = TRAITS.map(t => sliderHTML('pop', t, S.pop[t.k], true)).join('');
+document.getElementById('dcSliders').innerHTML = TRAITS.map(t => sliderHTML('dot', t, t.def, false)).join('');
+TRAITS.forEach(t => {
+  const pe = document.getElementById('pop-' + t.k), po = document.getElementById('pop-' + t.k + '-out');
+  pe.addEventListener('input', () => { const v = +pe.value; S.pop[t.k] = v; po.textContent = t.fmt(v);
+    for (const p of particles) if (!p.locked) { p.t[t.k] = rollTrait(t.k); p.col = colorFor(p); }
+    syncDotCard(true); });
+  const de = document.getElementById('dot-' + t.k), dout = document.getElementById('dot-' + t.k + '-out');
+  de.addEventListener('input', () => { if (!selected) return; const v = +de.value; selected.t[t.k] = v; dout.textContent = t.fmt(v);
+    selected.locked = true; document.getElementById('dcLock').checked = true; selected.col = colorFor(selected); });
+});
+function rerollAll(){ for (const p of particles) if (!p.locked) { TRAITS.forEach(t => p.t[t.k] = rollTrait(t.k)); p.col = colorFor(p); } syncDotCard(true); }
+
+/* ---------------- panel: picked dot ---------------- */
+const dotcard = document.getElementById('dotcard');
+function selectDot(p){
+  selected = p; dotcard.hidden = !p;
+  if (p) syncDotCard(true);
+}
+function syncDotCard(sliders){
+  const p = selected; if (!p) return;
+  document.getElementById('dcName').textContent = 'Dot #' + p.id;
+  document.getElementById('dcSwatch').style.background = p.col;
+  let mem = 0; for (let i = 0; i < p.visits.length; i++) if (p.visits[i]) mem++;
+  const closest = p.bestS > 0 ? Math.round((1 - p.bestS) * S.scentRange) + 'px' : 'unknown';
+  const state = p.done ? 'Resting at goal' : p.seeGoal ? 'Can see a goal' : p.route ? 'Following its route' : p.target ? (p.target.kind === 'lead' ? 'Heading to a tip' : 'Heading to a route') : 'Exploring';
+  const rows_ = [['Doing', state], ['Trips', p.trips], ['Last trip', p.lastTrip != null ? fmtT(p.lastTrip) : '—'], ['Best trip', p.bestTrip != null ? fmtT(p.bestTrip) : '—'],
+    ['Knows a route', p.route ? 'yes, ' + Math.round(p.route.len/2) + ' steps' : 'no'], ['Closest to goal', closest],
+    ['Cells explored', mem], ['Hazard hits', p.hits], ['Messages heard', p.heard], ['Messages passed on', p.told], ['Danger spots known', p.dangerSpots.length], ['Dead goals known', p.deadNews.length]];
+  document.getElementById('dcStats').innerHTML = rows_.map(([k,v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
+  if (sliders) {
+    document.getElementById('dcLock').checked = p.locked;
+    TRAITS.forEach(t => { document.getElementById('dot-' + t.k).value = p.t[t.k]; document.getElementById('dot-' + t.k + '-out').textContent = t.fmt(p.t[t.k]); });
+  }
+}
+document.getElementById('dcClose').onclick = () => selectDot(null);
+document.getElementById('dcLock').onchange = e => { if (selected) selected.locked = e.target.checked; };
+document.getElementById('dcForget').onclick = () => { if (selected) { wipeBrain(selected); syncDotCard(false); } };
+document.getElementById('dcCopy').onclick = () => { if (!selected) return; for (const p of particles) { p.t = {...selected.t}; p.col = colorFor(p); } };
+document.getElementById('dcClone').onclick = () => {
+  if (!selected || particles.length >= 400) return;
+  const q = makeParticle(); q.t = {...selected.t}; q.locked = selected.locked;
+  q.hv.set(selected.hv); q.visits.set(selected.visits); q.danger.set(selected.danger);
+  q.route = selected.route; q.dangerSpots = selected.dangerSpots.map(d => ({...d})); q.deadNews = selected.deadNews.map(d => ({...d}));
+  q.bestS = selected.bestS; q.lead = selected.lead; q.x = selected.x; q.y = selected.y; q.col = colorFor(q);
+  particles.push(q); setCountUI(particles.length);
+};
+document.getElementById('dcRemove').onclick = () => {
+  if (!selected) return; particles.splice(particles.indexOf(selected), 1); selectDot(null); setCountUI(particles.length);
+};
+function setCountUI(n){ document.getElementById('count').value = n; document.getElementById('countOut').textContent = n; }
+
+/* ---------------- panel: other controls ---------------- */
+const bind = (id, fn, fmt, ev = 'input') => { const el = document.getElementById(id), o = document.getElementById(id + 'Out');
+  const go = () => { fn(+el.value); if (o) o.textContent = fmt(+el.value); }; el.addEventListener(ev, go); if (o) o.textContent = fmt(+el.value); return el; };
+bind('count', v => setCount(v), v => String(v));
+const varEl = bind('variation', v => { S.variation = v/100; }, v => v + '%');
+varEl.addEventListener('change', rerollAll);
+bind('simSpeed', v => S.simSpeed = v/100, v => (v/100).toFixed(1) + '×');
+bind('scentRange', v => { S.scentRange = v; renderScent(); }, v => v + 'px');
+bind('hazSize', v => S.hazardSize = v, v => v + 'px');
+bind('brush', v => S.brush = v, v => String(v));
+const chk = (id, fn) => document.getElementById(id).addEventListener('change', e => fn(e.target.checked));
+chk('talkOn', v => S.talkOn = v); chk('talkWalls', v => S.talkWalls = v); chk('showTalk', v => { S.showTalk = v; events = []; });
+chk('scentOn', v => { S.scentOn = v; renderScent(); });
+chk('optTrails', v => { S.trails = v; tctx.clearRect(0,0,W,H); }); chk('optSensors', v => S.sensors = v);
+chk('optScent', v => S.scentMap = v); chk('optBrain', v => S.brainMap = v);
+document.getElementById('colorMode').addEventListener('change', e => { S.colorMode = e.target.value; for (const p of particles) p.col = colorFor(p); renderLegend(); });
+function renderLegend(){
+  const el = document.getElementById('legend'); if (!el) return;
+  if (S.colorMode === 'smarts') el.innerHTML = `<div class="ramp" style="background:linear-gradient(90deg,hsl(205 70% 50%),hsl(260 70% 55%),hsl(315 70% 50%))"></div><div class="ends"><span>0% smarts</span><span>100%</span></div>`;
+  else if (S.colorMode === 'know') el.innerHTML = `<div class="key"><span><i class="swatch" style="background:var(--ink-dim)"></i>Knows nothing yet</span><span><i class="swatch" style="background:var(--lead)"></i>Has a tip</span><span><i class="swatch" style="background:var(--accent)"></i>Knows a route</span></div>`;
+  else el.innerHTML = `<div class="ramp" style="background:linear-gradient(90deg,hsl(205 70% 50%),hsl(315 70% 50%))"></div><div class="ends"><span>1 trip</span><span>8+ trips</span></div><p class="note">Grey dots haven't reached a goal yet.</p>`;
+}
+const segBind = (id, attr, fn) => document.getElementById(id).addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
+  for (const x of document.querySelectorAll('#' + id + ' button')) x.setAttribute('aria-pressed', String(x === b)); fn(b.dataset[attr]); });
+segBind('mazeSize', 'u', v => { S.mazeU = +v; newMaze(); });
+segBind('arrive', 'v', v => { S.onArrive = v; if (v === 'again') for (const p of particles) if (p.done) spawn(p); });
+
+const tips = { draw:'Drag to draw walls. Dots feel them with their sensors and learn to route around them.', erase:'Drag to erase walls and open new paths.',
+  goal:'Tap an open spot to add a goal. Tap a goal to remove it, and watch the dots figure out it is gone.', hazard:'Tap to drop a hazard. Tap one to remove it. Dots that touch a hazard go back to start and remember the spot.',
+  start:'Tap to move the start point. Dots go back there after each trip.', inspect:'Tap a dot to see its memory and edit its traits.' };
+document.getElementById('tools').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
+  S.tool = b.dataset.tool; for (const x of document.querySelectorAll('#tools button')) x.setAttribute('aria-pressed', String(x === b));
+  cv.style.cursor = S.tool === 'inspect' ? 'pointer' : 'crosshair'; document.getElementById('tip').textContent = tips[S.tool]; });
+
+document.getElementById('mazeBtn').onclick = () => newMaze();
+const pauseBtn = document.getElementById('pauseBtn');
+pauseBtn.onclick = () => { S.paused = !S.paused; pauseBtn.textContent = S.paused ? 'Resume' : 'Pause'; };
+document.getElementById('restartBtn').onclick = () => { for (const p of particles) spawn(p); tctx.clearRect(0,0,W,H); };
+document.getElementById('wipeBtn').onclick = () => { for (const p of particles) { wipeBrain(p); spawn(p); } arrivals = []; tripCount = 0; hitCount = 0; msgCount = 0; tctx.clearRect(0,0,W,H); syncDotCard(false); };
+document.getElementById('clearGoalsBtn').onclick = () => { goals = []; renderScent(); };
+document.getElementById('clearHazBtn').onclick = () => { hazards = []; };
+document.getElementById('clearWallsBtn').onclick = () => { grid.fill(0); hasMaze = false; afterWallsChanged(); };
+document.getElementById('randHazBtn').onclick = () => {
+  for (let k = 0, made = 0; k < 300 && made < 3; k++) {
+    const c = Math.floor(rnd(1, cols-1)), r = Math.floor(rnd(1, rows-1)); if (isWall(c,r)) continue;
+    const pt = centerOf(c,r); if (Math.hypot(pt.x-start.x, pt.y-start.y) < 60 || goals.some(g => Math.hypot(g.x-pt.x, g.y-pt.y) < 50)) continue;
+    hazards.push({id:nextObj++, x:pt.x, y:pt.y, r:S.hazardSize}); made++;
+  }
+};
+document.getElementById('rerollBtn').onclick = rerollAll;
+
+/* ---------------- canvas input ---------------- */
+let drawing = false, lastPt = null;
+const ptr = e => { const r = cv.getBoundingClientRect(); return {x:e.clientX - r.left, y:e.clientY - r.top}; };
+function stamp(x, y){
+  const c0 = Math.floor(x/CELL), r0 = Math.floor(y/CELL), rad = S.brush - .5, v = S.tool === 'draw' ? 1 : 0;
+  for (let dy = -S.brush; dy <= S.brush; dy++) for (let dx = -S.brush; dx <= S.brush; dx++) {
+    if (dx*dx + dy*dy > rad*rad + .5) continue; const c = c0+dx, r = r0+dy;
+    if (c < 0 || r < 0 || c >= cols || r >= rows) continue; grid[r*cols+c] = v; }
+}
+function paint(a, b){ const d = Math.hypot(b.x-a.x, b.y-a.y), n = Math.max(1, Math.ceil(d/(CELL*.5)));
+  for (let i = 0; i <= n; i++) stamp(a.x + (b.x-a.x)*i/n, a.y + (b.y-a.y)*i/n); wallsDirty = true; }
+cv.addEventListener('pointerdown', e => {
+  const p = ptr(e);
+  if (S.tool === 'draw' || S.tool === 'erase') { cv.setPointerCapture(e.pointerId); drawing = true; lastPt = p; paint(p, p); return; }
+  const c = Math.floor(p.x/CELL), r = Math.floor(p.y/CELL);
+  if (S.tool === 'goal') {
+    const hit = goals.find(g => Math.hypot(g.x-p.x, g.y-p.y) < 16);
+    if (hit) { goals = goals.filter(g => g !== hit); renderScent(); return; }
+    const s = openNear(c, r, 4); if (s) addGoal(centerOf(s[0], s[1]));
+  } else if (S.tool === 'hazard') {
+    const hit = hazards.find(h => Math.hypot(h.x-p.x, h.y-p.y) < Math.max(h.r, 12));
+    if (hit) { hazards = hazards.filter(h => h !== hit); return; }
+    hazards.push({id:nextObj++, x:p.x, y:p.y, r:S.hazardSize});
+  } else if (S.tool === 'start') {
+    const s = openNear(c, r, 4); if (!s) return; start = centerOf(s[0], s[1]); for (const q of particles) spawn(q); tctx.clearRect(0,0,W,H);
+  } else if (S.tool === 'inspect') {
+    let best = null, bd = 30; for (const q of particles) { const d = Math.hypot(q.x-p.x, q.y-p.y); if (d < bd) { bd = d; best = q; } }
+    selectDot(best);
+  }
+});
+cv.addEventListener('pointermove', e => { if (!drawing) return; const p = ptr(e); paint(lastPt, p); lastPt = p; });
+const endDraw = () => { drawing = false; };
+cv.addEventListener('pointerup', endDraw); cv.addEventListener('pointercancel', endDraw);
+
+/* ---------------- boot ---------------- */
+readColors();
+try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readColors); } catch (_) {}
+new MutationObserver(readColors).observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
+new ResizeObserver(() => resize(false)).observe(sheet);
+resize(true);
+setCount(+document.getElementById('count').value);
+renderLegend();
+
+let last = performance.now();
+function loop(now){
+  const dt = Math.min(2.5, Math.max(.1, (now - last) / 16.667)); last = now;
+  if (grid) {
+    if (wallsDirty) { wallsDirty = false; afterWallsChanged(); relocateTrapped(); }
+    if (!S.paused) {
+      step(dt);
+      for (let i = events.length - 1; i >= 0; i--) if ((events[i].life -= dt) <= 0) events.splice(i, 1);
+      if (frame % 15 === 0) { for (const p of particles) p.col = colorFor(p); if (selected) syncDotCard(false); }
+    }
+    render();
+    if (frame % 10 === 0 || S.paused) updateHud();
+    if (frame % 30 === 0) drawChart();
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+window.__swarm = { get particles(){ return particles; }, get tripCount(){ return tripCount; }, get msgCount(){ return msgCount; }, get simT(){ return simT; } };
+})();
+</script>
+
+</body></html>
